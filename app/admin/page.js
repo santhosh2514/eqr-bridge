@@ -47,7 +47,7 @@ export default function AdminPage() {
   return (
     <div className="container mx-auto py-10">
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-gray-800">QR Code Admin Panel</h1>
+        <h1 className="text-2xl font-bold text-gray-800">e-QR Bridge Admin Panel</h1>
         <CreateQRModal onSubmit={handleMappingSubmit} groups={groups} onCreateGroup={handleGroupCreate} />
       </div>
       <MappingTable mappings={mappings} onUpdate={fetchMappings} groups={groups} setGroups={setGroups} />
