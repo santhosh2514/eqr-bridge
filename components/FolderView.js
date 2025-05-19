@@ -4,19 +4,42 @@ import { Input } from "@/components/ui/input"
 import { supabase } from "@/lib/supabaseClient"
 import { saveAs } from 'file-saver'
 import jsPDF from 'jspdf'
-import { ChevronRight, Edit, Folder, FolderOpen, Globe, Link as LinkIcon, Plus, Save, X } from 'lucide-react'
+import { ChevronRight, Edit, Folder, FolderOpen, Globe, Link as LinkIcon, Plus, Save, X, Trash2 } from 'lucide-react'
 import { QRCodeCanvas } from 'qrcode.react'
-import { useRef, useState } from 'react'
+import { useRef, useState, useEffect } from 'react'
 
-export default function FolderView({ mappings, groups, onUpdate }) {
+export default function FolderView({ mappings, groups, onUpdate, onDeleteGroup }) {
   const [selectedQR, setSelectedQR] = useState(null)
   const [searchTerm, setSearchTerm] = useState("")
   const [editingId, setEditingId] = useState(null)
   const [editingUrl, setEditingUrl] = useState("")
+  const [groupImages, setGroupImages] = useState({})
   const [expandedGroups, setExpandedGroups] = useState(
     groups.reduce((acc, group) => ({ ...acc, [group]: false }), {})
   )
+
   const qrCodeRefs = useRef({})
+
+  useEffect(() => {
+    // Fetch group images
+    const fetchGroupImages = async () => {
+      const { data, error } = await supabase
+        .from('groups')
+        .select('name, image_url')
+      
+      if (!error && data) {
+        const images = {}
+        data.forEach(group => {
+          if (group.image_url) {
+            images[group.name] = group.image_url
+          }
+        })
+        setGroupImages(images)
+      }
+    }
+
+    fetchGroupImages()
+  }, [])
 
   const handleEdit = (mapping) => {
     setEditingId(mapping.id);
@@ -32,6 +55,17 @@ export default function FolderView({ mappings, groups, onUpdate }) {
     if (!error) {
       setEditingId(null);
       onUpdate();
+    }
+  }
+
+  const handleDelete = async (id) => {
+    const { error } = await supabase
+      .from('mappings')
+      .delete()
+      .eq('id', id)
+
+    if (!error) {
+      onUpdate()
     }
   }
 
@@ -73,6 +107,12 @@ export default function FolderView({ mappings, groups, onUpdate }) {
     }))
   }
 
+  const handleDeleteGroup = async (groupName) => {
+    if (window.confirm(`Are you sure you want to delete the group "${groupName}" and all its QR codes?`)) {
+      await onDeleteGroup(groupName)
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-4 mb-6">
@@ -103,9 +143,9 @@ export default function FolderView({ mappings, groups, onUpdate }) {
                 isExpanded ? 'bg-gradient-to-r from-blue-50/80 to-white' : ''
               }`}
             >
-              <button
+              <div
                 onClick={() => toggleGroup(group)}
-                className={`w-full px-6 py-4 flex items-center gap-3 hover:bg-blue-50/50 focus:outline-none border-b ${
+                className={`w-full px-6 py-4 flex items-center gap-3 hover:bg-blue-50/50 focus:outline-none border-b cursor-pointer ${
                   isExpanded 
                     ? 'bg-blue-100/50 border-blue-200/50 shadow-sm' 
                     : 'border-gray-100 hover:border-blue-100'
@@ -132,8 +172,19 @@ export default function FolderView({ mappings, groups, onUpdate }) {
                   }`}>
                     {items.length} {items.length === 1 ? 'item' : 'items'}
                   </span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handleDeleteGroup(group)
+                    }}
+                    className="ml-auto text-red-500 hover:text-red-600 hover:bg-red-50"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
                 </div>
-              </button>
+              </div>
 
               {isExpanded && (
                 <div className="divide-y divide-blue-100/50">
@@ -214,6 +265,14 @@ export default function FolderView({ mappings, groups, onUpdate }) {
                               >
                                 View QR
                               </Button>
+                              <Button
+                                variant="destructive"
+                                size="sm"
+                                onClick={() => handleDelete(mapping.id)}
+                                className="h-10 w-10 p-0"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
                             </div>
                           </div>
                         </div>
@@ -251,13 +310,13 @@ export default function FolderView({ mappings, groups, onUpdate }) {
                 size={256}
                 level="H"
                 imageSettings={{
-                  src: `${process.env.NEXT_PUBLIC_DOMAIN}/logo.png`,
+                  src: groupImages[selectedQR.group_name] || `${process.env.NEXT_PUBLIC_DOMAIN}/logo.png`,
                   height: 100,
                   width: 100,
                   excavate: true,
+                  crossOrigin: "anonymous"
                 }}
                 ref={(el) => (qrCodeRefs.current[selectedQR.id] = el)}
-                renderAs="canvas"
               />
               <div className="flex flex-col items-center mt-4 space-y-4 w-full">
                 <div className="bg-gray-200 w-full p-3 rounded-md text-center">

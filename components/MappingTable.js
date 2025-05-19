@@ -38,18 +38,40 @@ import {
 } from '@tanstack/react-table'
 import { saveAs } from 'file-saver'
 import jsPDF from 'jspdf'
-import { Edit, Save, X } from 'lucide-react'
+import { Edit, Save, X, Trash2 } from 'lucide-react'
 import { QRCodeCanvas } from 'qrcode.react'
 import { useEffect, useRef, useState } from 'react'
 
 // Import the logo image
-export default function MappingTable({ mappings, onUpdate, groups, setGroups }) {
+export default function MappingTable({ mappings, onUpdate, groups, setGroups, onDeleteGroup }) {
   const [editingId, setEditingId] = useState(null)
   const [editingUrl, setEditingUrl] = useState('')
   const [groupFilter, setGroupFilter] = useState('all')
   const [columnSearch, setColumnSearch] = useState('')
   const [selectedQR, setSelectedQR] = useState(null)
+  const [groupImages, setGroupImages] = useState({})
   const qrCodeRefs = useRef({});
+
+  useEffect(() => {
+    // Fetch group images
+    const fetchGroupImages = async () => {
+      const { data, error } = await supabase
+        .from('groups')
+        .select('name, image_url')
+      
+      if (!error && data) {
+        const images = {}
+        data.forEach(group => {
+          if (group.image_url) {
+            images[group.name] = group.image_url
+          }
+        })
+        setGroupImages(images)
+      }
+    }
+
+    fetchGroupImages()
+  }, [])
 
   useEffect(() => {
     // Ensure qrCodeRefs.current is initialized for all mappings
@@ -74,6 +96,23 @@ export default function MappingTable({ mappings, onUpdate, groups, setGroups }) 
     if (!error) {
       setEditingId(null)
       onUpdate()
+    }
+  }
+
+  const handleDelete = async (id) => {
+    const { error } = await supabase
+      .from('mappings')
+      .delete()
+      .eq('id', id)
+
+    if (!error) {
+      onUpdate()
+    }
+  }
+
+  const handleDeleteGroup = async (groupName) => {
+    if (window.confirm(`Are you sure you want to delete the group "${groupName}" and all its QR codes?`)) {
+      await onDeleteGroup(groupName)
     }
   }
 
@@ -176,29 +215,36 @@ export default function MappingTable({ mappings, onUpdate, groups, setGroups }) 
                 </DropdownMenuItem>
               ))}
               <DropdownMenuSeparator className="bg-gray-300" />
-              <DropdownMenuItem
-                onClick={() => {
-                  const newGroup = prompt('Enter new group name:')
-                  if (newGroup) {
-                    setGroups([...groups, newGroup])
-                  }
-                }}
-                className="text-blue-500 hover:bg-gray-100 focus:bg-gray-100"
-              >
-                + Create New Group
-              </DropdownMenuItem>
+              {mapping.group_name && (
+                <>
+                  <DropdownMenuSeparator className="bg-gray-300" />
+                  <DropdownMenuItem
+                    onClick={() => handleDeleteGroup(mapping.group_name)}
+                    className="text-red-500 hover:bg-red-50 focus:bg-red-50"
+                  >
+                    Delete Group
+                  </DropdownMenuItem>
+                </>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
         )
       },
     },
     {
-      id: 'qr_code',
-      header: 'QR Code',
+      id: 'actions',
+      header: 'Actions',
       cell: ({ row }) => (
-        <div className="flex items-center">
+        <div className="flex items-center gap-2">
           <Button size="sm" onClick={() => setSelectedQR(row.original)}>
             View QR
+          </Button>
+          <Button 
+            size="sm" 
+            variant="destructive"
+            onClick={() => handleDelete(row.original.id)}
+          >
+            <Trash2 className="h-4 w-4" />
           </Button>
         </div>
       ),
@@ -288,13 +334,13 @@ export default function MappingTable({ mappings, onUpdate, groups, setGroups }) 
                 size={256}
                 level="H"
                 imageSettings={{
-                  src: `${process.env.NEXT_PUBLIC_DOMAIN}/logo.png`,
+                  src: groupImages[selectedQR.group_name] || `${process.env.NEXT_PUBLIC_DOMAIN}/logo.png`,
                   height: 100,
                   width: 100,
                   excavate: true,
+                  crossOrigin: "anonymous"
                 }}
                 ref={(el) => (qrCodeRefs.current[selectedQR.id] = el)}
-                renderAs="canvas"
               />
               <div className="flex mt-2 space-x-2">
                 <Button size="sm" onClick={() => downloadQRCode(selectedQR)}>
